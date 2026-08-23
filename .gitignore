@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Node
+node_modules/
+dist/
+.env.local
+
+# OS
+.DS_Store
+
+# GCP
+*.json
+!frontend/package.json
+!backend/**/*.json
+service-account*.json
+
+backend/.env
+
+backend/.venv/
+
+frontend/.env
