@@ -41,7 +41,7 @@ async def mcp_session():
             yield session
 
 
-async def run_query(query: str) -> dict:
+async def run_select_query(query: str) -> dict:
     """Calls the official run_query MCP tool on ClickHouse.
     This is the ONLY way the Continuity Agent reads scene facts.
     """

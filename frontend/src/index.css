@@ -2,41 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Scrollbar minimalista tipo macOS */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* Configuración base para asegurar el fondo OLED puro */
 body {
-  background-color: #09090b;
-  color: #f5f5f4;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+  color: #f2ead9;
+}
+
+.filmstrip-edge {
+  background-image: repeating-linear-gradient(
+    90deg,
+    #d4af37 0px,
+    #d4af37 6px,
+    transparent 6px,
+    transparent 18px
+  );
+  height: 3px;
+  opacity: 0.5;
+}
+
+.grain-panel {
+  background-color: #131109;
+  background-image: radial-gradient(circle at 1px 1px, rgba(212, 175, 55, 0.04) 1px, transparent 0);
+  background-size: 16px 16px;
 }

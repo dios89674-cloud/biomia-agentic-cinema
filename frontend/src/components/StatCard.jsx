@@ -1,17 +1,15 @@
 export default function StatCard({ label, value, unit, trend, icon }) {
   return (
-    <div className="bg-[#121214]/80 backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 rounded-2xl p-6 transition-all duration-300 shadow-2xl flex flex-col justify-between">
-      <div>
-        <div className="flex items-center gap-2 text-[11px] font-mono tracking-wider text-stone-400 uppercase mb-3">
-          <span>{icon}</span>
-          {label}
-        </div>
-        <div className="flex items-baseline gap-2">
-          <span className="font-sans font-semibold text-3xl text-stone-100 tracking-tight">{value}</span>
-          {unit && <span className="text-stone-400 text-xs font-mono">{unit}</span>}
-        </div>
+    <div className="grain-panel border border-gold-600/15 rounded-lg p-5">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-stone-400 mb-3">
+        <span>{icon}</span>
+        {label}
       </div>
-      {trend && <div className="text-[11px] font-mono text-stone-400 mt-3 pt-3 border-t border-white/[0.04]">{trend}</div>}
+      <div className="flex items-baseline gap-2">
+        <span className="font-display text-3xl text-gold-400">{value}</span>
+        {unit && <span className="text-stone-400 text-sm">{unit}</span>}
+      </div>
+      {trend && <div className="text-xs text-emerald-400 mt-2">{trend}</div>}
     </div>
   )
 }

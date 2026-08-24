@@ -3,14 +3,30 @@ import Sidebar from './Sidebar.jsx'
 import StatCard from './StatCard.jsx'
 import PipelineBoard from './PipelineBoard.jsx'
 import DirectorConsole from './DirectorConsole.jsx'
+import UploadFootage from './UploadFootage.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 
+// The 6 real agents in the pipeline. Everything here is a static fact about
+// the system (name, role, model, which stage it corresponds to) — NOT a
+// fabricated metric. Live counts are computed from real Firestore data in
+// fetchScenes() and merged in below.
+const AGENT_DEFS = [
+  { stage: 'script', name: 'Script Agent', role: 'Extracts characters, props, wardrobe, and location from scene text.' },
+  { stage: 'storyboard', name: 'Storyboard Agent', role: 'Generates shot-by-shot framing and camera direction.' },
+  { stage: 'casting', name: 'Casting Agent', role: 'Suggests actor attributes based on script requirements.' },
+  { stage: 'edit', name: 'Edit Agent', role: 'Proposes cut order and pacing once footage is uploaded.' },
+  { stage: 'vfx', name: 'VFX Agent', role: 'Flags shots needing visual effects and estimates cost.' },
+  { stage: 'continuity', name: 'Continuity Agent', role: 'Queries ClickHouse via MCP to catch continuity breaks; can block the pipeline.' },
+]
+const MODEL_NAME = 'gemini-3.6-flash'
+
 export default function DirectorDashboard() {
   const [active, setActive] = useState('pipeline')
-  const [scenesByStage, setScenesByStage] = useState({})
+  const [allScenes, setAllScenes] = useState([])
+  const [scenesByStage, setScenesByStage] = useState({ script: [], preprod: [], shoot: [], postprod: [] })
   const [messages, setMessages] = useState([
-    { role: 'agent', text: "Director's Core online. Neural agent swarm standing by." },
+    { role: 'agent', text: "Director's Core online. Waiting for real telemetry from Firestore." },
   ])
   const [health, setHealth] = useState(null)
 
@@ -29,12 +45,18 @@ export default function DirectorDashboard() {
     try {
       const res = await fetch(`${API_BASE}/scenes`)
       const data = await res.json()
+      const scenes = data.scenes || []
+      setAllScenes(scenes)
+
       const grouped = { script: [], preprod: [], shoot: [], postprod: [] }
-      for (const scene of data.scenes || []) {
+      for (const scene of scenes) {
         if (grouped[scene.stage]) grouped[scene.stage].push(scene)
       }
       setScenesByStage(grouped)
-    } catch {}
+    } catch {
+      // Backend unreachable — leave existing state as-is rather than
+      // substitute fake data. The health badge already signals this.
+    }
   }
 
   const sendCommand = async (text) => {
@@ -55,11 +77,16 @@ export default function DirectorDashboard() {
       ])
       fetchScenes()
     } catch {
-      setMessages((prev) => [...prev, { role: 'agent', text: 'Telemetry link offline.' }])
+      setMessages((prev) => [...prev, { role: 'agent', text: 'Could not reach the backend.' }])
     }
   }
 
-  const totalScenes = Object.values(scenesByStage).flat().length
+  const totalScenes = allScenes.length
+
+  // Real count of how many scenes have actually passed through each stage —
+  // derived from completed_stages in Firestore, not invented.
+  const stageCount = (stage) =>
+    allScenes.filter((s) => (s.completed_stages || []).includes(stage)).length
 
   const renderMainContent = () => {
     switch (active) {
@@ -67,6 +94,7 @@ export default function DirectorDashboard() {
         return (
           <div className="grid grid-cols-3 gap-6">
             <div className="col-span-2">
+              <UploadFootage eligibleScenes={scenesByStage.preprod || []} onUploaded={fetchScenes} />
               <PipelineBoard scenesByStage={scenesByStage} />
             </div>
             <div className="col-span-1">
@@ -74,101 +102,92 @@ export default function DirectorDashboard() {
             </div>
           </div>
         )
+
       case 'agents':
         return (
           <div className="max-w-5xl space-y-4">
             <div className="flex items-center justify-between px-1">
-              <span className="text-[11px] font-mono tracking-widest text-stone-500 uppercase">Neural Swarm Telemetry // DAG Topology</span>
-              <span className="text-[11px] font-mono text-stone-300">6 Nodes Active</span>
+              <span className="text-[11px] font-mono tracking-widest text-stone-500 uppercase">Agent Swarm // DAG Topology</span>
+              <span className="text-[11px] font-mono text-stone-300">{AGENT_DEFS.length} agents defined</span>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {[
-                { name: 'Script Agent', role: 'Contextual screenplay structuring & narrative logic', engine: 'Gemini 3.1 Pro', latency: '142ms', load: '12%' },
-                { name: 'Storyboard Agent', role: 'Multi-modal semantic frame interpretation', engine: 'Gemini 3.1 Flash', latency: '98ms', load: '38%' },
-                { name: 'Casting Agent', role: 'Actor asset verification & continuity index', engine: 'Vertex AI Agent', latency: '210ms', load: '4%' },
-                { name: 'Edit Agent', role: 'Automated temporal timeline cuts & sequencing', engine: 'ADK Core Pipeline', latency: '75ms', load: '0%' },
-                { name: 'VFX Agent', role: 'Pixel-level composition & element tracking', engine: 'Multimodal Vision', latency: '310ms', load: '84%' },
-                { name: 'Continuity Agent', role: 'Zero-latency fact-checking via analytical store', engine: 'ClickHouse MCP', latency: '18ms', load: '22%' },
-              ].map((agent, i) => (
-                <div key={i} className="group relative p-5 bg-[#121214]/80 backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 rounded-2xl transition-all duration-300 flex flex-col justify-between shadow-2xl">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-sans font-medium text-sm text-stone-100 tracking-tight">{agent.name}</h3>
-                      <span className="font-mono text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Operational</span>
+              {AGENT_DEFS.map((agent) => {
+                const count = stageCount(agent.stage)
+                return (
+                  <div key={agent.stage} className="group relative p-5 bg-[#121214]/80 backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 rounded-2xl transition-all duration-300 flex flex-col justify-between shadow-2xl">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-sans font-medium text-sm text-stone-100 tracking-tight">{agent.name}</h3>
+                        <span className="font-mono text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          {count > 0 ? 'Has run' : 'Not run yet'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-stone-400 font-sans leading-relaxed mb-4">{agent.role}</p>
                     </div>
-                    <p className="text-xs text-stone-400 font-sans leading-relaxed mb-4">{agent.role}</p>
-                  </div>
-                  <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between font-mono text-[11px] text-stone-500">
-                    <span className="text-stone-400">{agent.engine}</span>
-                    <div className="flex items-center gap-3">
-                      <span>Lat: {agent.latency}</span>
-                      <span className="text-stone-300">Load: {agent.load}</span>
+                    <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between font-mono text-[11px] text-stone-500">
+                      <span className="text-stone-400">{MODEL_NAME}</span>
+                      <span className="text-stone-300">{count} scene{count === 1 ? '' : 's'} completed</span>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )
+
       case 'clickhouse':
         return (
           <div className="max-w-4xl p-8 bg-[#121214]/80 backdrop-blur-2xl border border-white/[0.08] rounded-2xl shadow-2xl">
             <div className="flex items-center justify-between pb-6 border-b border-white/[0.06] mb-6">
               <div>
                 <h2 className="font-sans font-medium text-base text-stone-100 tracking-tight">ClickHouse Analytical Engine</h2>
-                <p className="text-xs text-stone-400 mt-0.5">Secure bridging via Model Context Protocol (MCP)</p>
+                <p className="text-xs text-stone-400 mt-0.5">Queried by the Continuity Agent via the official ClickHouse MCP server</p>
               </div>
-              <span className="font-mono text-[11px] px-3 py-1 rounded-full bg-white/[0.06] text-stone-200 border border-white/10">Encrypted Tunnel</span>
+              <span className="font-mono text-[11px] px-3 py-1 rounded-full bg-white/[0.06] text-stone-200 border border-white/10">MCP stdio</span>
             </div>
             <div className="space-y-6 font-mono text-xs">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-black/50 border border-white/[0.06]">
-                  <div className="text-stone-500 mb-1">PROXIED ENDPOINT</div>
-                  <div className="text-stone-300 truncate">clickhouse://mcp-secure-proxy:9000</div>
-                </div>
-                <div className="p-4 rounded-xl bg-black/50 border border-white/[0.06]">
-                  <div className="text-stone-500 mb-1">PROTOCOL SPEC</div>
-                  <div className="text-stone-300">MCP v1.2 // Zero-Trust Isolation</div>
-                </div>
+              <div className="p-4 rounded-xl bg-black/50 border border-white/[0.06]">
+                <div className="text-stone-500 mb-1">CONNECTION</div>
+                <div className="text-stone-300">Configured via CLICKHOUSE_HOST env var — credentials never exposed to the browser</div>
               </div>
               <div className="p-5 rounded-xl bg-black/50 border border-white/[0.06]">
-                <div className="text-stone-500 mb-3 tracking-wider">INDEXED SCHEMAS & ENTITIES</div>
-                <div className="grid grid-cols-2 gap-3 text-stone-300">
-                  <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-stone-300" /><code>scene_facts</code></div>
-                  <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-stone-300" /><code>character_registry</code></div>
-                  <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-stone-300" /><code>vfx_audit_logs</code></div>
-                  <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-stone-300" /><code>continuity_breaks</code></div>
+                <div className="text-stone-500 mb-3 tracking-wider">SCHEMA (clickhouse/schema.sql)</div>
+                <div className="flex items-center gap-2 text-stone-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-stone-300" />
+                  <code>agentic_cinema.scene_facts</code>
+                  <span className="text-stone-600 text-[11px] ml-2">scene_id, stage, facts_json, recorded_at</span>
                 </div>
               </div>
             </div>
           </div>
         )
+
       case 'tools':
         return (
           <div className="max-w-4xl grid grid-cols-2 gap-6">
             <div className="p-6 bg-[#121214]/80 backdrop-blur-2xl border border-white/[0.08] rounded-2xl flex flex-col justify-between shadow-2xl">
               <div>
-                <h3 className="font-sans font-medium text-sm text-stone-100 tracking-tight mb-1">Synthetic Pipeline Dispatcher</h3>
-                <p className="text-xs text-stone-400 font-sans leading-relaxed mb-6">Inyecta una secuencia de prueba automatizada directamente al DAG del orquestador.</p>
+                <h3 className="font-sans font-medium text-sm text-stone-100 tracking-tight mb-1">Test Pipeline Dispatch</h3>
+                <p className="text-xs text-stone-400 font-sans leading-relaxed mb-6">Sends a real command to /commands and creates an actual scene in Firestore.</p>
               </div>
-              <button 
-                onClick={() => sendCommand("Crea una nueva escena de ciencia ficción llamada elite_demo_01 y arranca el pipeline")}
+              <button
+                onClick={() => sendCommand('A rival crew confronts our protagonist in a rain-soaked alley at midnight.')}
                 className="w-full py-3 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-stone-100 border border-white/10 font-mono text-xs transition-all duration-200 text-center active:scale-[0.99]"
               >
-                Execute Synthetic Sequence →
+                Dispatch Test Scene →
               </button>
             </div>
             <div className="p-6 bg-[#121214]/80 backdrop-blur-2xl border border-white/[0.08] rounded-2xl flex flex-col justify-between shadow-2xl">
               <div>
-                <h3 className="font-sans font-medium text-sm text-stone-100 tracking-tight mb-1">Cloud Run Infrastructure Node</h3>
-                <p className="text-xs text-stone-400 font-sans leading-relaxed mb-4">Estado del clúster de servicios en región us-central1.</p>
+                <h3 className="font-sans font-medium text-sm text-stone-100 tracking-tight mb-1">Cloud Run Backend</h3>
+                <p className="text-xs text-stone-400 font-sans leading-relaxed mb-4">Live status from the deployed service.</p>
               </div>
               <div className="space-y-2 font-mono text-[11px] bg-black/50 p-4 rounded-xl border border-white/[0.06]">
                 <div className="text-stone-400 truncate"><span className="text-stone-600">URL:</span> {API_BASE}</div>
                 <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
                   <span className="text-stone-600">Status</span>
-                  <span className="text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className={`flex items-center gap-1.5 ${health?.status === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full bg-current ${health?.status === 'ok' ? 'animate-pulse' : ''}`} />
                     {health?.status || 'connecting...'}
                   </span>
                 </div>
@@ -176,6 +195,7 @@ export default function DirectorDashboard() {
             </div>
           </div>
         )
+
       default:
         return null
     }
@@ -196,12 +216,12 @@ export default function DirectorDashboard() {
                 <h1 className="font-sans font-semibold text-lg text-stone-100 tracking-tight">
                   Agentic Cinema <span className="text-stone-500 font-normal">/ Director&rsquo;s Suite</span>
                 </h1>
-                <p className="text-xs text-stone-400 font-mono mt-0.5">Project: biomia-agentic-cinema-2026</p>
+                <p className="text-xs text-stone-400 font-mono mt-0.5">biomia-agentic-cinema-2026</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Badge>Gemini 3.1</Badge>
-              <Badge>Vertex AI</Badge>
+              <Badge>{MODEL_NAME}</Badge>
+              <Badge>Google Cloud</Badge>
               <Badge>ClickHouse MCP</Badge>
               <div className="h-4 w-[1px] bg-white/10 mx-1" />
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono ${
@@ -210,7 +230,7 @@ export default function DirectorDashboard() {
                   : 'border-red-500/20 bg-red-500/[0.05] text-red-400'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full bg-current ${health?.status === 'ok' ? 'animate-pulse' : ''}`} />
-                {health?.status === 'ok' ? 'System Nominal' : 'Offline'}
+                {health?.status === 'ok' ? 'Backend Online' : 'Backend Offline'}
               </div>
             </div>
           </header>

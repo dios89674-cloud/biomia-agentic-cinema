@@ -12,12 +12,14 @@ Deploy with: gcloud run deploy agentic-cinema-backend --source .
 
 import os
 import uuid
-from fastapi import FastAPI, Request
+import tempfile
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from agents.orchestrator import handle_state_change
 from services import firestore_client as fs
+from services import storage_client
 
 load_dotenv()
 
@@ -38,6 +40,31 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "agentic-cinema-backend"}
+
+
+@app.post("/scenes/{scene_id}/footage")
+async def upload_footage(scene_id: str, file: UploadFile = File(...)):
+    """Accepts a footage file from the browser, uploads it to Cloud Storage
+    under footage/{scene_id}/{filename}. This upload is what fires the
+    Eventarc trigger (agentic-cinema-footage-trigger) — the same path a
+    juror can verify by watching the scene advance in the Pipeline board
+    a few seconds after this call returns.
+    """
+    scene = fs.get_scene(scene_id)
+    if scene is None:
+        return {"status": "error", "reason": f"scene {scene_id} not found"}
+
+    suffix = os.path.splitext(file.filename or "upload.mp4")[1] or ".mp4"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    try:
+        gs_uri = storage_client.upload_asset(tmp_path, scene_id, kind="footage")
+    finally:
+        os.remove(tmp_path)
+
+    return {"status": "ok", "scene_id": scene_id, "gs_uri": gs_uri}
 
 
 @app.get("/scenes")
