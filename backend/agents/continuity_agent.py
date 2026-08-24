@@ -16,7 +16,7 @@ requirement of real, in-code, runtime MCP usage (not a mention in a README).
 from google.adk.agents import Agent
 from google.adk.tools import FunctionTool
 
-from services.mcp_clickhouse_client import run_query
+from services.mcp_clickhouse_client import run_select_query
 
 
 async def check_continuity(scene_id: str) -> dict:
@@ -30,7 +30,7 @@ async def check_continuity(scene_id: str) -> dict:
         WHERE scene_id = '{scene_id}'
         ORDER BY recorded_at ASC
     """
-    return await run_query(query)
+    return await run_select_query(query)
 
 
 continuity_tool = FunctionTool(func=check_continuity)
