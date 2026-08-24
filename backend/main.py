@@ -102,14 +102,21 @@ def _map_to_ui_column(completed_stages: list[str]) -> str:
 
 @app.post("/eventarc/scene-updated")
 async def scene_updated(request: Request):
-    """Eventarc CloudEvents payload. We only care about the document path
-    to know which scene changed; the orchestrator re-checks the full DAG
-    state from Firestore itself rather than trusting the event payload.
+    """Firestore delivers this event body as protobuf, not JSON — parsing
+    it isn't worth the trouble. CloudEvents (binary content mode, which is
+    how Eventarc/Pub-Sub delivers these) puts everything we actually need
+    in HTTP headers instead. `ce-subject` looks like
+    'documents/scenes/{sceneId}' for a write to that document.
+
+    The orchestrator re-reads fresh state from Firestore itself rather
+    than trusting anything in the event payload, so the header is all
+    we need here.
     """
-    body = await request.json()
-    scene_id = _extract_scene_id(body)
+    subject = request.headers.get("ce-subject", "")
+    scene_id = subject.split("/scenes/")[-1] if "/scenes/" in subject else None
+
     if not scene_id:
-        return {"status": "ignored", "reason": "no scene_id in event"}
+        return {"status": "ignored", "reason": f"no scene_id in ce-subject: {subject!r}"}
 
     dispatched = await handle_state_change(scene_id)
     return {"status": "ok", "scene_id": scene_id, "dispatched_stages": dispatched}
@@ -168,15 +175,6 @@ async def director_command(request: Request):
         "command": command_text,
         "dispatched_stages": dispatched,
     }
-
-
-def _extract_scene_id(cloud_event_body: dict) -> str | None:
-    # Firestore CloudEvents: document path looks like
-    # "projects/{p}/databases/(default)/documents/scenes/{scene_id}"
-    document = cloud_event_body.get("document", "")
-    if "/scenes/" in document:
-        return document.split("/scenes/")[-1]
-    return None
 
 
 if __name__ == "__main__":
