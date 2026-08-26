@@ -9,7 +9,7 @@ large binary assets — see services/storage_client.py for that.
 import os
 from datetime import datetime, timezone
 from google.cloud import firestore
-from google.cloud.firestore_v1 import ArrayUnion
+from google.cloud.firestore_v1 import ArrayUnion, ArrayRemove
 
 _db: firestore.Client | None = None
 
@@ -72,6 +72,16 @@ def upsert_scene_stage(scene_id: str, stage: str, status: str, extra: dict | Non
 def list_all_scenes() -> list[dict]:
     docs = get_client().collection("scenes").stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
+
+
+def reset_stage(scene_id: str, stage: str) -> None:
+    """Removes `stage` from completed_stages so the orchestrator will
+    re-run it. Useful for demos/debugging — re-running Continuity after
+    new facts land in ClickHouse, for example.
+    """
+    get_client().collection("scenes").document(scene_id).set(
+        {"completed_stages": ArrayRemove([stage])}, merge=True
+    )
 
 
 def list_scenes_by_stage(stage: str) -> list[dict]:

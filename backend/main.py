@@ -67,6 +67,29 @@ async def upload_footage(scene_id: str, file: UploadFile = File(...)):
     return {"status": "ok", "scene_id": scene_id, "gs_uri": gs_uri}
 
 
+@app.post("/scenes/{scene_id}/rerun/{stage}")
+async def rerun_stage(scene_id: str, stage: str):
+    """Debug/demo endpoint: removes `stage` from completed_stages and
+    re-triggers the orchestrator, so it runs again against whatever
+    fresh data now exists (e.g. new rows in ClickHouse).
+    """
+    fs.reset_stage(scene_id, stage)
+    dispatched = await handle_state_change(scene_id)
+    return {"status": "ok", "scene_id": scene_id, "dispatched_stages": dispatched}
+
+
+@app.get("/scenes/{scene_id}")
+async def get_scene_detail(scene_id: str):
+    """Full scene document, including each stage's raw agent output
+    (scene['results'][stage]) — useful for inspecting exactly what the
+    Continuity Agent decided and why.
+    """
+    scene = fs.get_scene(scene_id)
+    if scene is None:
+        return {"status": "error", "reason": f"scene {scene_id} not found"}
+    return scene
+
+
 @app.get("/scenes")
 async def list_scenes():
     """Returns all scenes with their pipeline progress, for the frontend's

@@ -9,12 +9,15 @@ This orchestrator is DAG-based: each stage only runs after its
 prerequisite stage is present in the scene's completed_stages list.
 """
 
+import json
+
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from services import firestore_client as fs
+from services import clickhouse_writer
 from agents.script_agent import script_agent
 from agents.storyboard_agent import storyboard_agent
 from agents.casting_agent import casting_agent
@@ -72,6 +75,23 @@ async def _run_agent(stage_name: str, scene_id: str, input_text: str) -> str:
     return final_response
 
 
+def _extract_facts(stage_name: str, result_text: str) -> dict:
+    """Storyboard and Edit agents embed a facts object in their JSON output
+    (under 'scene_facts' or 'observed_facts'). Best-effort parse — if the
+    model didn't return clean JSON this stage, we just skip writing facts
+    rather than crashing the whole pipeline over it.
+    """
+    key = {"storyboard": "scene_facts", "edit": "observed_facts"}.get(stage_name)
+    if key is None:
+        return {}
+    try:
+        cleaned = result_text.strip().removeprefix("```json").removesuffix("```").strip()
+        parsed = json.loads(cleaned)
+        return parsed.get(key, {})
+    except (json.JSONDecodeError, AttributeError):
+        return {}
+
+
 async def handle_state_change(scene_id: str) -> list[str]:
     """Entry point invoked by the Eventarc-triggered webhook (see main.py).
 
@@ -93,8 +113,25 @@ async def handle_state_change(scene_id: str) -> list[str]:
         if stage_name in completed or not _prerequisite_met(scene, prerequisite):
             continue
 
-        stage_input = scene.get("script_text") or f"Process scene {scene_id} for stage {stage_name}."
+        if stage_name == "continuity":
+            # The Continuity Agent must call check_continuity(scene_id) with
+            # the REAL scene_id, not a word it infers from the creative
+            # script text (e.g. it once guessed 'alley' from "foggy alley"
+            # instead of using the actual ID) — spell it out explicitly.
+            stage_input = (
+                f"The scene_id for this check is exactly: {scene_id}\n"
+                f"Call the check_continuity tool with scene_id='{scene_id}' "
+                f"(use this exact string, not a word from the script below).\n\n"
+                f"Script context: {scene.get('script_text', '')}"
+            )
+        else:
+            stage_input = scene.get("script_text") or f"Process scene {scene_id} for stage {stage_name}."
+
         result_text = await _run_agent(stage_name, scene_id, stage_input)
+
+        facts = _extract_facts(stage_name, result_text)
+        if facts:
+            clickhouse_writer.write_scene_fact(scene_id, stage_name, facts)
 
         fs.mark_stage_complete(scene_id, stage_name, result=result_text)
         dispatched.append(stage_name)
