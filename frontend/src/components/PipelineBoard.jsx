@@ -5,12 +5,12 @@ const STAGE_META = {
   postprod: { label: 'Post-Prod', color: 'border-postprod', dot: 'bg-postprod' },
 }
 
-export default function PipelineBoard({ scenesByStage }) {
+export default function PipelineBoard({ scenesByStage, onSceneClick }) {
   return (
     <div className="grain-panel border border-gold-600/15 rounded-lg p-6">
       <div className="flex items-center justify-between mb-5">
         <h2 className="font-display text-lg text-gold-400">Production Pipeline</h2>
-        <span className="text-xs text-stone-500">↻ live from Firestore</span>
+        <span className="text-xs text-stone-500">↻ live from Firestore — click a scene to see what the agents did</span>
       </div>
       <div className="grid grid-cols-2 gap-6">
         {Object.entries(STAGE_META).map(([key, meta]) => {
@@ -25,15 +25,19 @@ export default function PipelineBoard({ scenesByStage }) {
                 {scenes.length === 0 && (
                   <p className="text-xs text-stone-600 italic">No scenes in this stage yet.</p>
                 )}
-                {scenes.map((scene) => (
-                  <div
-                    key={scene.id}
-                    className="flex items-center justify-between bg-reel-900/60 rounded px-3 py-2 border-l-2 border-gold-600/40"
-                  >
-                    <span className="text-sm text-stone-200">{scene.title || scene.id}</span>
-                    <span className="text-xs text-stone-400">{scene.status}</span>
-                  </div>
-                ))}
+                {scenes.map((scene) => {
+                  const isBlocked = scene.status === 'continuity' && scene.completed_stages?.includes('continuity')
+                  return (
+                    <button
+                      key={scene.id}
+                      onClick={() => onSceneClick?.(scene.id)}
+                      className="w-full flex items-center justify-between bg-reel-900/60 hover:bg-reel-900 rounded px-3 py-2 border-l-2 border-gold-600/40 transition-colors text-left"
+                    >
+                      <span className="text-sm text-stone-200">{scene.title || scene.id}</span>
+                      <span className="text-xs text-stone-400">{scene.status} →</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )

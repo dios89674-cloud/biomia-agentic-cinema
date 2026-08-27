@@ -4,6 +4,8 @@ import StatCard from './StatCard.jsx'
 import PipelineBoard from './PipelineBoard.jsx'
 import DirectorConsole from './DirectorConsole.jsx'
 import UploadFootage from './UploadFootage.jsx'
+import PipelineOverview from './PipelineOverview.jsx'
+import SceneDetailModal from './SceneDetailModal.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 
@@ -23,6 +25,7 @@ const MODEL_NAME = 'gemini-3.6-flash'
 
 export default function DirectorDashboard() {
   const [active, setActive] = useState('pipeline')
+  const [selectedSceneId, setSelectedSceneId] = useState(null)
   const [allScenes, setAllScenes] = useState([])
   const [scenesByStage, setScenesByStage] = useState({ script: [], preprod: [], shoot: [], postprod: [] })
   const [messages, setMessages] = useState([
@@ -94,8 +97,9 @@ export default function DirectorDashboard() {
         return (
           <div className="grid grid-cols-3 gap-6">
             <div className="col-span-2">
+              <PipelineOverview allScenes={allScenes} />
               <UploadFootage eligibleScenes={scenesByStage.preprod || []} onUploaded={fetchScenes} />
-              <PipelineBoard scenesByStage={scenesByStage} />
+              <PipelineBoard scenesByStage={scenesByStage} onSceneClick={setSelectedSceneId} />
             </div>
             <div className="col-span-1">
               <DirectorConsole messages={messages} onSend={sendCommand} />
@@ -245,6 +249,8 @@ export default function DirectorDashboard() {
           {renderMainContent()}
         </div>
       </main>
+
+      <SceneDetailModal sceneId={selectedSceneId} onClose={() => setSelectedSceneId(null)} />
     </div>
   )
 }

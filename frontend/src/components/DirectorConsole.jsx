@@ -39,7 +39,7 @@ export default function DirectorConsole({ onSend, messages }) {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Write a command for your autonomous agent..."
+          placeholder="Describe a new scene (e.g. 'A detective enters a foggy alley...')"
           className="flex-1 bg-reel-900 border border-gold-600/20 rounded px-3 py-2 text-sm text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-gold-500"
         />
         <button

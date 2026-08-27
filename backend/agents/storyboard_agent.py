@@ -9,6 +9,12 @@ generate a shot-by-shot storyboard description: camera angle, framing, and
 key visual beats per shot. Also emit the same scene facts unchanged so they
 can be written to ClickHouse for continuity tracking later.
 
+If the input does not actually describe a scene — for example if it's a
+question, a command asking to look something up, or otherwise has no real
+characters/props/location to work with — do NOT invent a fictional scene.
+Instead respond with:
+{"shots": [], "scene_facts": {"characters": [], "props": [], "wardrobe": [], "location": "UNKNOWN"}, "note": "Input does not describe a storyboardable scene."}
+
 Respond ONLY with strict JSON:
 {
   "shots": [{"shot_number": number, "angle": string, "framing": string, "description": string}],
