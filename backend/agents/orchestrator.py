@@ -131,7 +131,14 @@ async def handle_state_change(scene_id: str) -> list[str]:
 
         facts = _extract_facts(stage_name, result_text)
         if facts:
-            clickhouse_writer.write_scene_fact(scene_id, stage_name, facts)
+            try:
+                clickhouse_writer.write_scene_fact(scene_id, stage_name, facts)
+            except Exception as e:
+                # Writing to ClickHouse is auxiliary bookkeeping for the
+                # Continuity Agent to use later — it must never take down
+                # the whole pipeline if ClickHouse is slow/unreachable.
+                # The creative work (Gemini's output) already succeeded.
+                print(f"WARNING: failed to write scene fact to ClickHouse for {scene_id}/{stage_name}: {e}")
 
         fs.mark_stage_complete(scene_id, stage_name, result=result_text)
         dispatched.append(stage_name)

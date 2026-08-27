@@ -48,5 +48,5 @@ def write_scene_fact(scene_id: str, stage: str, facts: dict) -> None:
         "Basic " + __import__("base64").b64encode(auth.encode()).decode(),
     )
 
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=20) as resp:
         resp.read()
