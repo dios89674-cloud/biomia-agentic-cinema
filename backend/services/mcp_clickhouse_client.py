@@ -50,6 +50,43 @@ async def run_select_query(query: str) -> dict:
         return result
 
 
+def _extract_text(mcp_result) -> str:
+    """MCP tool results come back as a list of content blocks; pull the
+    text out of the first one. Defensive — different server versions may
+    shape this slightly differently.
+    """
+    try:
+        return mcp_result.content[0].text
+    except (AttributeError, IndexError, TypeError):
+        return str(mcp_result)
+
+
+async def get_live_stats() -> dict:
+    """Real aggregate queries against ClickHouse — this is the dashboard's
+    'ClickHouse is actually doing something' proof, and it goes through the
+    exact same MCP path the Continuity Agent uses. Not a simple row lookup:
+    these are genuine GROUP BY / COUNT aggregations, the kind of query
+    ClickHouse is actually built for.
+    """
+    total_raw = await run_select_query(
+        "SELECT count() AS total FROM agentic_cinema.scene_facts"
+    )
+    by_stage_raw = await run_select_query(
+        "SELECT stage, count() AS count FROM agentic_cinema.scene_facts "
+        "GROUP BY stage ORDER BY count DESC"
+    )
+    recent_raw = await run_select_query(
+        "SELECT scene_id, stage, recorded_at FROM agentic_cinema.scene_facts "
+        "ORDER BY recorded_at DESC LIMIT 10"
+    )
+
+    return {
+        "total": _extract_text(total_raw),
+        "by_stage": _extract_text(by_stage_raw),
+        "recent": _extract_text(recent_raw),
+    }
+
+
 async def list_tables(database: str) -> dict:
     async with mcp_session() as session:
         result = await session.call_tool("list_tables", {"database": database})

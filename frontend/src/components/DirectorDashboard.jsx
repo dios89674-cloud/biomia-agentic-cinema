@@ -6,6 +6,7 @@ import DirectorConsole from './DirectorConsole.jsx'
 import UploadFootage from './UploadFootage.jsx'
 import PipelineOverview from './PipelineOverview.jsx'
 import SceneDetailModal from './SceneDetailModal.jsx'
+import ClickHousePanel from './ClickHousePanel.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 
@@ -140,31 +141,7 @@ export default function DirectorDashboard() {
         )
 
       case 'clickhouse':
-        return (
-          <div className="max-w-4xl p-8 bg-[#121214]/80 backdrop-blur-2xl border border-white/[0.08] rounded-2xl shadow-2xl">
-            <div className="flex items-center justify-between pb-6 border-b border-white/[0.06] mb-6">
-              <div>
-                <h2 className="font-sans font-medium text-base text-stone-100 tracking-tight">ClickHouse Analytical Engine</h2>
-                <p className="text-xs text-stone-400 mt-0.5">Queried by the Continuity Agent via the official ClickHouse MCP server</p>
-              </div>
-              <span className="font-mono text-[11px] px-3 py-1 rounded-full bg-white/[0.06] text-stone-200 border border-white/10">MCP stdio</span>
-            </div>
-            <div className="space-y-6 font-mono text-xs">
-              <div className="p-4 rounded-xl bg-black/50 border border-white/[0.06]">
-                <div className="text-stone-500 mb-1">CONNECTION</div>
-                <div className="text-stone-300">Configured via CLICKHOUSE_HOST env var — credentials never exposed to the browser</div>
-              </div>
-              <div className="p-5 rounded-xl bg-black/50 border border-white/[0.06]">
-                <div className="text-stone-500 mb-3 tracking-wider">SCHEMA (clickhouse/schema.sql)</div>
-                <div className="flex items-center gap-2 text-stone-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-stone-300" />
-                  <code>agentic_cinema.scene_facts</code>
-                  <span className="text-stone-600 text-[11px] ml-2">scene_id, stage, facts_json, recorded_at</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
+        return <ClickHousePanel />
 
       case 'tools':
         return (

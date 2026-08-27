@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from agents.orchestrator import handle_state_change
 from services import firestore_client as fs
 from services import storage_client
+from services import mcp_clickhouse_client
 
 load_dotenv()
 
@@ -40,6 +41,19 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "agentic-cinema-backend"}
+
+
+@app.get("/clickhouse/live")
+async def clickhouse_live_stats():
+    """Real, live aggregate stats from ClickHouse — via the same MCP path
+    the Continuity Agent uses. This is what the frontend's ClickHouse tab
+    polls to show data genuinely flowing, not a static schema description.
+    """
+    try:
+        stats = await mcp_clickhouse_client.get_live_stats()
+        return {"status": "ok", **stats}
+    except Exception as e:
+        return {"status": "error", "reason": str(e)}
 
 
 @app.post("/scenes/{scene_id}/footage")
