@@ -123,6 +123,10 @@ def reset_stage(scene_id: str, stage: str) -> None:
     )
 
 
+def delete_scene(scene_id: str) -> None:
+    get_client().collection("scenes").document(scene_id).delete()
+
+
 def list_scenes_by_stage(stage: str) -> list[dict]:
     query = get_client().collection("scenes").where("stage", "==", stage)
     return [doc.to_dict() | {"id": doc.id} for doc in query.stream()]

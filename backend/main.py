@@ -92,6 +92,17 @@ async def rerun_stage(scene_id: str, stage: str):
     return {"status": "ok", "scene_id": scene_id, "dispatched_stages": dispatched}
 
 
+@app.delete("/scenes/{scene_id}")
+async def delete_scene(scene_id: str):
+    """Cleanup endpoint — deletes a scene from Firestore. Useful for
+    clearing out junk test scenes before a demo/recording. Does not touch
+    any footage already uploaded to Cloud Storage or facts already
+    written to ClickHouse (both are cheap to leave behind).
+    """
+    fs.delete_scene(scene_id)
+    return {"status": "ok", "deleted": scene_id}
+
+
 @app.get("/scenes/{scene_id}")
 async def get_scene_detail(scene_id: str):
     """Full scene document, including each stage's raw agent output
