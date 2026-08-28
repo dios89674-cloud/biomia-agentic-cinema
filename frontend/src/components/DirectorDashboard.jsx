@@ -30,7 +30,7 @@ export default function DirectorDashboard() {
   const [allScenes, setAllScenes] = useState([])
   const [scenesByStage, setScenesByStage] = useState({ script: [], preprod: [], shoot: [], postprod: [] })
   const [messages, setMessages] = useState([
-    { role: 'agent', text: "Director's Core online. Waiting for real telemetry from Firestore." },
+    { role: 'agent', text: "Ready, director. Describe a scene to get started — for example: \"A masked thief cracks open a vault...\"" },
   ])
   const [health, setHealth] = useState(null)
 
@@ -63,6 +63,35 @@ export default function DirectorDashboard() {
     }
   }
 
+  const summarizeStage = (stage, resultText) => {
+    if (!resultText) return null
+    let parsed
+    try {
+      parsed = JSON.parse(resultText.replace(/```json|```/g, '').trim())
+    } catch {
+      return null
+    }
+
+    switch (stage) {
+      case 'script':
+        return `📝 Script — ${parsed.characters?.join(', ') || 'no characters'} · props: ${parsed.props?.join(', ') || 'none'} · ${parsed.location || 'unknown location'}`
+      case 'storyboard':
+        return `🎨 Storyboard — ${parsed.shots?.length || 0} shots. First: "${parsed.shots?.[0]?.description || '—'}"`
+      case 'casting':
+        return `🎭 Casting — ${parsed.characters?.map((c) => c.name).join(', ') || 'no suggestions'}`
+      case 'edit':
+        return `✂️ Edit — ${parsed.cut_order?.length || 0} cuts ordered. ${parsed.pacing_notes || ''}`
+      case 'vfx':
+        return `✨ VFX — ${parsed.shots?.length || 0} shots flagged for effects`
+      case 'continuity':
+        return parsed.decision === 'blocked'
+          ? `🚨 Continuity — BLOCKED: ${parsed.reason}`
+          : `✅ Continuity — APPROVED: ${parsed.reason}`
+      default:
+        return null
+    }
+  }
+
   const sendCommand = async (text) => {
     setMessages((prev) => [...prev, { role: 'director', text }])
     try {
@@ -72,13 +101,25 @@ export default function DirectorDashboard() {
         body: JSON.stringify({ command: text }),
       })
       const data = await res.json()
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'agent',
-          text: `Scene ${data.scene_id}: dispatched [${(data.dispatched_stages || []).join(', ') || 'none'}].`,
-        },
-      ])
+      const dispatched = data.dispatched_stages || []
+
+      if (dispatched.length === 0) {
+        setMessages((prev) => [...prev, { role: 'agent', text: `Scene ${data.scene_id} created, but no stages ran yet.` }])
+      } else {
+        // Pull the real generated content for each stage that just ran,
+        // instead of only announcing that something happened.
+        const sceneRes = await fetch(`${API_BASE}/scenes/${data.scene_id}`)
+        const scene = await sceneRes.json()
+        const summaries = dispatched
+          .map((stage) => summarizeStage(stage, scene.results?.[stage]))
+          .filter(Boolean)
+
+        setMessages((prev) => [
+          ...prev,
+          { role: 'agent', text: `Scene ${data.scene_id} — ${dispatched.join(' → ')}` },
+          ...summaries.map((text) => ({ role: 'agent', text })),
+        ])
+      }
       fetchScenes()
     } catch {
       setMessages((prev) => [...prev, { role: 'agent', text: 'Could not reach the backend.' }])
