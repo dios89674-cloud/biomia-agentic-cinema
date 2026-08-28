@@ -113,6 +113,12 @@ async def handle_state_change(scene_id: str) -> list[str]:
         if stage_name in completed or not _prerequisite_met(scene, prerequisite):
             continue
 
+        # Atomically claim this stage before doing any work. If another
+        # overlapping Eventarc-triggered invocation already claimed it
+        # (a real race, since our own writes re-trigger the event), skip.
+        if not fs.try_claim_stage(scene_id, stage_name):
+            continue
+
         if stage_name == "continuity":
             # The Continuity Agent must call check_continuity(scene_id) with
             # the REAL scene_id, not a word it infers from the creative
@@ -127,7 +133,14 @@ async def handle_state_change(scene_id: str) -> list[str]:
         else:
             stage_input = scene.get("script_text") or f"Process scene {scene_id} for stage {stage_name}."
 
-        result_text = await _run_agent(stage_name, scene_id, stage_input)
+        try:
+            result_text = await _run_agent(stage_name, scene_id, stage_input)
+        except Exception:
+            # Release the claim so a future retry isn't permanently
+            # blocked just because this attempt hit a transient error
+            # (e.g. a Gemini 429).
+            fs.release_stage_claim(scene_id, stage_name)
+            raise
 
         facts = _extract_facts(stage_name, result_text)
         if facts:

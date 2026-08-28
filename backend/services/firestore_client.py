@@ -39,19 +39,58 @@ def create_scene(scene_id: str, extra: dict | None = None) -> None:
     get_client().collection("scenes").document(scene_id).set(payload, merge=True)
 
 
+def try_claim_stage(scene_id: str, stage: str) -> bool:
+    """Atomically claims `stage` for processing, using a Firestore
+    transaction. Returns True if this call won the claim (should proceed),
+    False if another concurrent invocation already claimed or completed it.
+
+    Why this exists: writing a stage's result to Firestore itself fires
+    Eventarc again (any write to the document re-triggers the 'document
+    written' event). Without this guard, two overlapping invocations can
+    both see a stage as 'not done yet' and both run it — wasting Gemini
+    quota and writing duplicate rows to ClickHouse. A transaction makes the
+    check-and-claim atomic even across multiple Cloud Run instances.
+    """
+    db = get_client()
+    doc_ref = db.collection("scenes").document(scene_id)
+
+    @firestore.transactional
+    def _claim(transaction):
+        snapshot = doc_ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
+        completed = data.get("completed_stages", [])
+        processing = data.get("processing_stages", [])
+
+        if stage in completed or stage in processing:
+            return False
+
+        transaction.set(doc_ref, {"processing_stages": ArrayUnion([stage])}, merge=True)
+        return True
+
+    return _claim(db.transaction())
+
+
 def mark_stage_complete(scene_id: str, stage: str, result: str) -> None:
-    """Appends `stage` to the scene's completed_stages list and records its
-    result. Using ArrayUnion (not a plain overwrite) means multiple stages
-    that share the same prerequisite — e.g. Storyboard and Casting, which
-    both only need 'script' — don't clobber each other's completion record.
+    """Appends `stage` to the scene's completed_stages list, records its
+    result, and releases the processing claim from try_claim_stage.
     """
     get_client().collection("scenes").document(scene_id).set(
         {
             "completed_stages": ArrayUnion([stage]),
+            "processing_stages": ArrayRemove([stage]),
             "results": {stage: result},
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
         merge=True,
+    )
+
+
+def release_stage_claim(scene_id: str, stage: str) -> None:
+    """If a stage fails after being claimed (e.g. Gemini errors out),
+    release the claim so a future retry isn't permanently blocked.
+    """
+    get_client().collection("scenes").document(scene_id).set(
+        {"processing_stages": ArrayRemove([stage])}, merge=True
     )
 
 
