@@ -1,11 +1,11 @@
 import { useState } from 'react'
 
-export default function DirectorConsole({ onSend, messages }) {
+export default function DirectorConsole({ onSend, messages, isThinking }) {
   const [input, setInput] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!input.trim()) return
+    if (!input.trim() || isThinking) return
     onSend(input.trim())
     setInput('')
   }
@@ -33,20 +33,32 @@ export default function DirectorConsole({ onSend, messages }) {
             </span>
           </div>
         ))}
+        {isThinking && (
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm bg-reel-900 text-stone-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-bounce" />
+              <span className="ml-1">Gemini is thinking...</span>
+            </span>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          disabled={isThinking}
           placeholder="Describe a new scene (e.g. 'A detective enters a foggy alley...')"
-          className="flex-1 bg-reel-900 border border-gold-600/20 rounded px-3 py-2 text-sm text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-gold-500"
+          className="flex-1 bg-reel-900 border border-gold-600/20 rounded px-3 py-2 text-sm text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-gold-500 disabled:opacity-50"
         />
         <button
           type="submit"
-          className="px-4 py-2 bg-gold-600 hover:bg-gold-500 text-reel-950 font-medium text-sm rounded transition-colors"
+          disabled={isThinking}
+          className="px-4 py-2 bg-gold-600 hover:bg-gold-500 disabled:opacity-40 disabled:cursor-not-allowed text-reel-950 font-medium text-sm rounded transition-colors"
         >
-          Send
+          {isThinking ? '...' : 'Send'}
         </button>
       </form>
     </div>

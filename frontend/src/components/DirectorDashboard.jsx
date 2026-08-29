@@ -27,6 +27,7 @@ const MODEL_NAME = 'gemini-3.6-flash'
 export default function DirectorDashboard() {
   const [active, setActive] = useState('pipeline')
   const [selectedSceneId, setSelectedSceneId] = useState(null)
+  const [isThinking, setIsThinking] = useState(false)
   const [allScenes, setAllScenes] = useState([])
   const [scenesByStage, setScenesByStage] = useState({ script: [], preprod: [], shoot: [], postprod: [] })
   const [messages, setMessages] = useState([
@@ -94,6 +95,7 @@ export default function DirectorDashboard() {
 
   const sendCommand = async (text) => {
     setMessages((prev) => [...prev, { role: 'director', text }])
+    setIsThinking(true)
     try {
       const res = await fetch(`${API_BASE}/commands`, {
         method: 'POST',
@@ -123,6 +125,8 @@ export default function DirectorDashboard() {
       fetchScenes()
     } catch {
       setMessages((prev) => [...prev, { role: 'agent', text: 'Could not reach the backend.' }])
+    } finally {
+      setIsThinking(false)
     }
   }
 
@@ -144,7 +148,7 @@ export default function DirectorDashboard() {
               <PipelineBoard scenesByStage={scenesByStage} onSceneClick={setSelectedSceneId} />
             </div>
             <div className="col-span-1">
-              <DirectorConsole messages={messages} onSend={sendCommand} />
+              <DirectorConsole messages={messages} onSend={sendCommand} isThinking={isThinking} />
             </div>
           </div>
         )
